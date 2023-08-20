@@ -68,9 +68,12 @@ class Switch:
         """
         Sends a packet to the specified output port using a UDP socket mechanism.
 
+        This function simulates sending a packet from one host to another through the switch.
+        The output_port parameter indicates the port where the destination host is connected
+
         Args:
             packet (dict): Dictionary containing keys 'src_mac', 'dst_mac', and 'msg_data'.
-            output_port (int): The output port number.
+            output_port (int): The output port number where the destination host is connected.
         """
         destination_ip = '127.0.0.1'
         destination_port = output_port
