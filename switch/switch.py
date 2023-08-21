@@ -80,7 +80,7 @@ class Switch:
 
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
-                sock.sendto(packet.encode(), (destination_ip, destination_port))
+                sock.sendto(str(packet).encode(), (destination_ip, destination_port))
                 print(f"Packet sent to port {destination_port}")
         except Exception as e:
             print(f"Error sending packet: {e}")
@@ -101,3 +101,8 @@ class Switch:
         print(f"MAC Table for Switch {self.switch_id}:")
         for src_mac, dst_mac in self.mac_table.items():
             print(f"MAC: {src_mac} => Port: {dst_mac}")
+
+    def send_update_to_controller(self, update_message, controller_address):
+        controller_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        controller_socket.sendto(update_message.encode(), controller_address)
+        controller_socket.close()
