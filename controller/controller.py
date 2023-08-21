@@ -1,5 +1,7 @@
 import requests
-
+import socket
+import threading
+from host.host import Host
 from controller.payload import install_flow_rule_payload, update_flow_rule_payload
 
 
@@ -28,7 +30,7 @@ class Controller:
 
     """
 
-    def __init__(self, switches):
+    def __init__(self, switches, controller_ip, controller_port, src_host):
         """
         Initialize a Controller instance.
 
@@ -37,28 +39,86 @@ class Controller:
         """
         self.switches = switches
         self.paths = {}
+        self.src_host = src_host
+        self.controller_ip = controller_ip
+        self.controller_port = controller_port
         self.BASE_URL = "https://sdncontroller.com/api/v1"
         self.HEADERS = {"Content-Type": "application/json"}
 
-    def define_flow_rule(self, source_device, destination_device):
+    def start_switch_listener(self):
+        """
+        Start a thread to listen for updates from switches.
+
+        This method creates a thread that listens for updates from switches using UDP.
+        The thread runs the _listen_for_switch_updates method.
+        """
+        switch_listener = threading.Thread(target=self._listen_for_switch_updates)
+        switch_listener.start()
+
+    def _listen_for_switch_updates(self):
+        """
+        Listens for updates from switches.
+
+        This method binds a socket to the controller's IP and port and listens for updates
+        from switches using UDP. Received updates are printed to the console.
+        """
+        switch_listen_address = (self.controller_ip, self.controller_port)
+        switch_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        switch_socket.bind(switch_listen_address)
+
+        while True:
+            data, switch_address = switch_socket.recvfrom(1024)
+            print(f"Received update from switch at {switch_address}: {data.decode()}")
+
+            switch_socket.close()
+
+    def receive_updates_from_switches(self):
+        """
+        Receive updates from switches through a UDP socket mechanism.
+        """
+        controller_address = (self.controller_ip, self.controller_port)
+
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+                sock.bind(controller_address)
+                print(f"Controller is listening on {self.controller_ip}:{self.controller_port}")
+                while True:
+                    update_message, switch_address = sock.recvfrom(1024)
+                    print(f"Received update from {switch_address}: {update_message.decode()}")
+        except Exception as e:
+            print(f"Error receiving updates: {e}")
+
+    def define_flow_rule(self, source_device, destination_device, dst_mac, dst_port):
         """
         Install a flow rule for communication between source and destination devices using APIs.
 
         Args:
             source_device (Device): The source smart device.
             destination_device (Device): The destination smart device.
+            dst_mac: The destination MAC address.
+            dst_port: The destination port.
+
         """
 
-        # Implement the logic to send API requests to hosts
-        src_mac = source_device["src_mac"]
-        dst_mac = destination_device["dst_mac"]
-        src_host = source_device["src_host"]
-        dst_port = destination_device["dst_port"]
+        # Implement the logic to send API requests to hosts or switches
+        if isinstance(source_device, Host):
+            src_mac = source_device.mac_address
+            src_host = source_device.src_host
+        else:
+            src_mac = source_device.mac_address
+            src_host = source_device.switch_id
 
-        # Update the payload with dynamic data to the three smart devices
+        if isinstance(destination_device, Host):
+            dst_mac = destination_device.mac_address
+        else:
+            dst_mac = None
+
+        # Update the payload with dynamic data for the devices
         install_flow_rule_payload["match"]["eth_src"] = src_mac
-        install_flow_rule_payload["match"]["eth_dst"] = dst_mac
-        install_flow_rule_payload["actions"][0]["port"] = dst_port
+        if dst_mac is not None:
+            install_flow_rule_payload["match"]["eth_dst"] = dst_mac
+        if dst_port is not None:
+            install_flow_rule_payload["actions"][0]["port"] = dst_port
 
         try:
             response = requests.post(self.BASE_URL + "/hosts/" + src_host + "/flow_rules",
@@ -67,35 +127,7 @@ class Controller:
         except requests.exceptions.RequestException as e:
             print("An error occurred while making the API request:", e)
         else:
-            print("Flow rule installed on switch " + src_host)
-
-    def update_flow_rule(self, source_device, destination_device):
-        """
-        Update an existing flow rule based on changing network conditions using APIs.
-
-        Args:
-            source_device (Device): The source smart device.
-            destination_device (Device): The destination smart device.
-        """
-
-        # Use APIs to communicate with switches and update flow rules
-        # Implement the logic to send API requests to switches
-        src_mac = source_device.mac_address
-        dst_mac = destination_device.mac_address
-
-        update_flow_rule_payload["match"]["eth_src"] = src_mac
-        update_flow_rule_payload["match"]["eth_dst"] = dst_mac
-
-        try:
-            response = requests.post(
-                f"{self.BASE_URL}/hosts/{source_device.name}/flow_rules",
-                json=update_flow_rule_payload,
-                headers=self.HEADERS
-            )
-            response.raise_for_status()
-            print(f"Updated flow rule for communication from {source_device.name} to {destination_device.name}")
-        except requests.exceptions.RequestException as e:
-            print("An error occurred while making the API request:", e)
+            print("Flow rule installed on device " + src_host)
 
     def optimize_energy_usage(self):
         """
@@ -112,10 +144,11 @@ class Controller:
             for destination_device, flow_path in destination_flow_paths.items():
                 energy_efficiency = self.calculate_energy_efficiency(flow_path)
 
-            if energy_efficiency > flow_path["energy_efficiency"]:
-                self.update_flow_rule(source_device, destination_device)
-                flow_path["energy_efficiency"] = energy_efficiency
-                print(f"Optimized flow rule for communication from {source_device.name} to {destination_device.name}")
+                if energy_efficiency > flow_path["energy_efficiency"]:
+                    update_flow_rule_payload(source_device, destination_device)
+                    flow_path["energy_efficiency"] = energy_efficiency
+                    print(f"Optimized flow rule for communication from {source_device.name} to "
+                          f"{destination_device.name}")
 
     def calculate_energy_efficiency(self, flow_path):
         """
@@ -131,13 +164,14 @@ class Controller:
         """
         path_length = len(flow_path["switches"]) + 1  # Including source and destination hosts
         network_load = self.calculate_network_load(flow_path["switches"])
-        traffic_priority = determine_traffic_priority(flow_path["traffic_type"])
+        traffic_priority = self.determine_traffic_priority(flow_path["traffic_type"])
 
         # Combine factors to calculate energy efficiency score
         energy_efficiency = (1 / path_length) * (1 - network_load) * traffic_priority
         return energy_efficiency
 
-    def calculate_network_load(self, switches):
+    @staticmethod
+    def calculate_network_load(switches):
         """
         Calculate the network load for a given set of switches.
 
@@ -150,3 +184,18 @@ class Controller:
             float: The calculated network load.
         """
         return sum(switch.load for switch in switches)
+
+    @staticmethod
+    def determine_traffic_priority(traffic_type):
+        """
+        Determine the priority of traffic based on its type.
+
+        Args:
+            traffic_type (str): Type of traffic (e.g., "lighting", "temperature", ...).
+
+        Returns:
+            float: The priority value for the traffic type.
+        """
+
+        priority_map = {"lighting": 0.9, "temperature": 0.7, "lock_control": 0.5}
+        return priority_map.get(traffic_type, 0.5)  # Default to medium priority
