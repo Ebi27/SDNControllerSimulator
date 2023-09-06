@@ -2,6 +2,7 @@ import requests
 import socket
 import threading
 from host.host import Host
+from switch.switch import Switch
 from controller.payload import install_flow_rule_payload, update_flow_rule_payload
 
 
@@ -88,37 +89,37 @@ class Controller:
         except Exception as e:
             print(f"Error receiving updates: {e}")
 
-    def define_flow_rule(self, source_device, destination_device, dst_mac, dst_port):
+    def define_flow_rule(self, source_device, destination_device):
         """
         Install a flow rule for communication between source and destination devices using APIs.
 
         Args:
             source_device (Device): The source smart device.
             destination_device (Device): The destination smart device.
-            dst_mac: The destination MAC address.
-            dst_port: The destination port.
 
         """
-
         # Implement the logic to send API requests to hosts or switches
         if isinstance(source_device, Host):
-            src_mac = source_device.mac_address
             src_host = source_device.src_host
-        else:
             src_mac = source_device.mac_address
+        elif isinstance(source_device, Switch):
             src_host = source_device.switch_id
+            src_mac = None  # No source MAC address for switches
+        else:
+            raise ValueError("Invalid source_device type")
 
         if isinstance(destination_device, Host):
             dst_mac = destination_device.mac_address
+        elif isinstance(destination_device, Switch):
+            dst_mac = None  # No destination MAC address for switches
         else:
-            dst_mac = None
+            raise ValueError("Invalid destination_device type")
 
         # Update the payload with dynamic data for the devices
-        install_flow_rule_payload["match"]["eth_src"] = src_mac
+        if src_mac is not None:
+            install_flow_rule_payload["match"]["eth_src"] = src_mac
         if dst_mac is not None:
             install_flow_rule_payload["match"]["eth_dst"] = dst_mac
-        if dst_port is not None:
-            install_flow_rule_payload["actions"][0]["port"] = dst_port
 
         try:
             response = requests.post(self.BASE_URL + "/hosts/" + src_host + "/flow_rules",

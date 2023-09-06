@@ -30,17 +30,14 @@ def main():
     switches = [living_room_switch, bedroom_switch]
     controller = Controller(switches, args.controller_ip, 9000, selected_src_host)
 
-    # Define flow paths
+    # Determine the destination device
     if args.src_host == "living_room_switch":
-        dst_mac = smart_light_bulb.mac_address
-        dst_port = None  # No destination port for hosts
+        destination_device = smart_light_bulb
     else:
-        dst_mac = smart_thermostat.mac_address
-        dst_port = None  # No destination port for hosts
+        destination_device = smart_thermostat
 
-    controller.define_flow_rule(selected_src_host, smart_light_bulb, dst_mac, dst_port)
-    controller.define_flow_rule(selected_src_host, smart_thermostat, dst_mac, dst_port)
-    controller.define_flow_rule(selected_src_host, smart_door_lock, dst_mac, dst_port)
+    # Define flow rule
+    controller.define_flow_rule(selected_src_host, destination_device)
 
     # Start receiving updates from switches in a separate thread
     import threading
@@ -65,20 +62,6 @@ def main():
             if source_device:
                 destination_device = selected_src_host  # The destination is the selected source host
                 source_device.send_message(message, destination_device)
-
-        if command == "send":
-            message = input("Enter the message: ")
-            device_name = input("Enter the device name (smart_light_bulb, smart_thermostat, smart_door_lock): ")
-            destination_device = None
-            if device_name == "smart_light_bulb":
-                destination_device = smart_light_bulb
-            elif device_name == "smart_thermostat":
-                destination_device = smart_thermostat
-            elif device_name == "smart_door_lock":
-                destination_device = smart_door_lock
-
-            if destination_device:
-                selected_src_host.send_message(message, destination_device)
 
         elif command == "exit":
             break

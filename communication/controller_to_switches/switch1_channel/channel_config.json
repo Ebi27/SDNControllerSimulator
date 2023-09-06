@@ -1,0 +1,36 @@
+{
+    "controller_ip": "192.168.1.100",
+    "controller_port": 6653,
+    "topology": {
+        "switches": [
+            {
+                "id": "SW1",
+                "controller_ip": "192.168.1.100",
+                "controller_port": 6653,
+                "ports": [1, 2, 3]
+            },
+            {
+                "id": "SW2",
+                "controller_ip": "192.168.1.100",
+                "controller_port": 6653,
+                "ports": [1, 2]
+            }
+        ],
+        "hosts": [
+            {
+                "mac_address": "AA:BB:CC:01",
+                "connected_switch": "SW1",
+                "port": 1
+            },
+            {
+                "mac_address": "AA:BB:CC:02",
+                "connected_switch": "SW1",
+                "port": 2
+            }
+        ]
+    },
+    "logging": {
+        "log_level": "info",
+        "log_file": "controller.log"
+    }
+}
