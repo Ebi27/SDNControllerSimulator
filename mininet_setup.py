@@ -1,11 +1,12 @@
 # mininet.py
 from mininet.net import Mininet
-from mininet.node import OVSSwitch, Controller
+from mininet.node import OVSSwitch, RemoteController
 from mininet.topo import Topo
 from mininet.log import setLogLevel
+from mininet.cli import CLI
 
 
-class MyTopology(Topo):
+class HomeAutomationTopology(Topo):
     """
         Build the custom network topology.
 
@@ -20,33 +21,41 @@ class MyTopology(Topo):
          """
 
         # Create switches
-        switch1 = self.addSwitch('s1')
-        switch2 = self.addSwitch('s2')
+        living_room_switch = self.addSwitch('s1')
+        bedroom_switch = self.addSwitch('s2')
 
         # Create hosts
-        host1 = self.addHost('h1')
-        host2 = self.addHost('h2')
-        host3 = self.addHost('h3')
+        light_bulb = self.addHost('h1', ip='192.168.1.1/24')
+        thermostat = self.addHost('h2', ip='192.168.1.2/24')
+        door_lock = self.addHost('h3', ip='192.168.1.3/24')
 
         # Connect hosts to switches
-        self.addLink(host1, switch1)
-        self.addLink(host2, switch1)
-        self.addLink(host3, switch2)
+        self.addLink(light_bulb, living_room_switch)
+        self.addLink(thermostat, living_room_switch)
+        self.addLink(door_lock, bedroom_switch)
 
 
-def create_network():
+def create_home_automation_network(ip, port):
     """
     Create and start the Mininet network.
 
     This function creates a Mininet network based on the defined topology and starts it.
     """
-    topo = MyTopology()
-    net = Mininet(topo=topo, switch=OVSSwitch, controller=Controller)
+
+    topo = HomeAutomationTopology()
+    net = Mininet(topo=topo, switch=OVSSwitch,
+                  controller=lambda name: RemoteController(name, ip=ip, port=port))
     net.start()
     return net
 
 
 if __name__ == '__main__':
     setLogLevel('info')
-    network = create_network()
+    controller_ip = 'RYU_CONTROLLER_IP'  # It will be replaced with Ryu controller's IP address
+    controller_port = 6633  # Default Ryu controller port
+    network = create_home_automation_network(controller_ip, controller_port)
+    # Retrieve the controller's IP address after creating the network
+    controller_ip = network.controllers[0].ip
+    print(f"Controller IP: {controller_ip}")
+    CLI(network)
     network.stop()
